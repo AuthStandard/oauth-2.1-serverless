@@ -9,9 +9,14 @@
     "clientName": "Admin CLI",
     "clientType": "CONFIDENTIAL",
     "redirectUris": [],
-    "grantTypes": ["client_credentials"],
+    "grantTypes": [
+      "client_credentials"
+    ],
     "authStrategyId": "password",
-    "allowedScopes": ["openid", "admin"],
+    "allowedScopes": [
+      "openid",
+      "admin"
+    ],
     "tokenLifetimes": {
       "accessToken": 3600,
       "refreshToken": 86400,
@@ -29,16 +34,34 @@
     "clientId": "test-app",
     "clientName": "Test Application",
     "clientType": "CONFIDENTIAL",
-    "redirectUris": ["https://example.com/callback", "http://localhost:3000/callback"],
-    "grantTypes": ["authorization_code", "refresh_token"],
+    "redirectUris": [
+      "https://example.com/callback",
+      "http://localhost:3000/callback",
+      "http://localhost:3000/callback.html",
+      "http://localhost:5000/callback.html",
+      "http://localhost:5000/tests/webapp/callback.html",
+      "http://localhost:3000/tests/webapp/callback.html"
+    ],
+    "grantTypes": [
+      "authorization_code",
+      "refresh_token"
+    ],
     "authStrategyId": "password",
-    "allowedScopes": ["openid", "profile", "email"],
+    "allowedScopes": [
+      "openid",
+      "profile",
+      "email",
+      "offline_access"
+    ],
     "tokenLifetimes": {
       "accessToken": 3600,
       "refreshToken": 2592000,
       "authorizationCode": 600
     },
-    "postLogoutRedirectUris": ["https://example.com/logout", "http://localhost:3000/logout"],
+    "postLogoutRedirectUris": [
+      "https://example.com/logout",
+      "http://localhost:3000/logout"
+    ],
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z"
   },
@@ -51,10 +74,25 @@
     "clientId": "test-public-app",
     "clientName": "Test Public App (SPA)",
     "clientType": "PUBLIC",
-    "redirectUris": ["https://example.com/callback", "http://localhost:3000/callback"],
-    "grantTypes": ["authorization_code", "refresh_token"],
+    "redirectUris": [
+      "https://example.com/callback",
+      "http://localhost:3000/callback",
+      "http://localhost:3000/callback.html",
+      "http://localhost:5000/callback.html",
+      "http://localhost:5000/tests/webapp/callback.html",
+      "http://localhost:3000/tests/webapp/callback.html"
+    ],
+    "grantTypes": [
+      "authorization_code",
+      "refresh_token"
+    ],
     "authStrategyId": "password",
-    "allowedScopes": ["openid", "profile", "email"],
+    "allowedScopes": [
+      "openid",
+      "profile",
+      "email",
+      "offline_access"
+    ],
     "tokenLifetimes": {
       "accessToken": 3600,
       "refreshToken": 604800,

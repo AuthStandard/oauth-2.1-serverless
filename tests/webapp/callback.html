@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Callback</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Processing...</h1>
+            <p id="status">Exchanging authorization code for tokens</p>
+        </header>
+
+        <div id="result" style="display: none;">
+            <div class="result-card">
+                <div class="result-header">
+                    <span id="resultStatus" class="status"></span>
+                </div>
+                <div class="result-body">
+                    <pre id="resultData"></pre>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <a href="index.html" style="color: var(--primary); text-decoration: none; font-weight: 500;">← Back to
+                    Test App</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (async function () {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            const error = params.get('error');
+            const errorDescription = params.get('error_description');
+            const state = params.get('state');
+
+            const resultDiv = document.getElementById('result');
+            const statusEl = document.getElementById('status');
+            const resultStatus = document.getElementById('resultStatus');
+            const resultData = document.getElementById('resultData');
+
+            // Verify state
+            const savedState = sessionStorage.getItem('oauth_state');
+            if (state && savedState && state !== savedState) {
+                showError('State mismatch', 'The state parameter does not match. Possible CSRF attack.');
+                return;
+            }
+
+            if (error) {
+                showError(error, errorDescription || 'Unknown error');
+                return;
+            }
+
+            if (!code) {
+                showError('Missing code', 'No authorization code received');
+                return;
+            }
+
+            // Load config
+            const savedConfig = localStorage.getItem('oauth_test_config');
+            if (!savedConfig) {
+                showError('No config', 'Please configure the test app first');
+                return;
+            }
+
+            const config = JSON.parse(savedConfig);
+            const verifier = sessionStorage.getItem('oauth_verifier');
+            const redirectUri = sessionStorage.getItem('oauth_redirect_uri');
+
+            if (!verifier) {
+                showError('Missing verifier', 'PKCE code verifier not found. Please start a new flow.');
+                return;
+            }
+
+            if (!redirectUri) {
+                showError('Missing redirect_uri', 'Redirect URI not found. Please start a new flow.');
+                return;
+            }
+
+            // Exchange code for tokens
+            try {
+                const body = new URLSearchParams({
+                    grant_type: 'authorization_code',
+                    code,
+                    redirect_uri: redirectUri,
+                    client_id: config.clientId,
+                    code_verifier: verifier,
+                });
+
+                if (config.clientSecret) {
+                    body.set('client_secret', config.clientSecret);
+                }
+
+                const response = await fetch(config.apiBaseUrl + '/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body.toString(),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Save tokens
+                    const tokens = {
+                        accessToken: data.access_token,
+                        refreshToken: data.refresh_token,
+                        idToken: data.id_token,
+                        expiresAt: Date.now() + (data.expires_in * 1000),
+                    };
+                    localStorage.setItem('oauth_test_tokens', JSON.stringify(tokens));
+
+                    showSuccess('Token exchange successful', data);
+
+                    // Clean up
+                    sessionStorage.removeItem('oauth_verifier');
+                    sessionStorage.removeItem('oauth_state');
+                    sessionStorage.removeItem('oauth_nonce');
+                    sessionStorage.removeItem('oauth_redirect_uri');
+
+                    // Redirect after delay
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 2000);
+                } else {
+                    showError(data.error || 'Token error', data.error_description || JSON.stringify(data));
+                }
+            } catch (err) {
+                showError('Network error', err.message);
+            }
+
+            function showError(title, message) {
+                document.querySelector('header h1').textContent = 'Error';
+                statusEl.textContent = title;
+                resultDiv.style.display = 'block';
+                resultStatus.textContent = 'ERROR';
+                resultStatus.className = 'status error';
+                resultData.textContent = message;
+            }
+
+            function showSuccess(title, data) {
+                document.querySelector('header h1').textContent = 'Success!';
+                statusEl.textContent = 'Redirecting to test app...';
+                resultDiv.style.display = 'block';
+                resultStatus.textContent = 'SUCCESS';
+                resultStatus.className = 'status success';
+                resultData.textContent = JSON.stringify(data, null, 2);
+            }
+        })();
+    </script>
+</body>
+
+</html>

@@ -2,11 +2,11 @@
   "clients": {
     "admin-cli": {
       "client_id": "admin-cli",
-      "client_secret": "9d5a682f2dcd2480972a66574781316705075bde57b27a8291d0e22c8bad649f"
+      "client_secret": "d6c2c271b80af6581b6bbf775b320157368dc98855ca4ff40ba2481e45a1a332"
     },
     "test-app": {
       "client_id": "test-app",
-      "client_secret": "4f75ce5b64376ef3c818aa554543a1fc93c9525f9d76dfbabdf76ba77570f6ed",
+      "client_secret": "5a19030e720742ab6b856e794a2ecfedf4fd6c7c1e3004ce491e1117c973dc00",
       "redirect_uri": "https://example.com/callback"
     },
     "test-public-app": {
