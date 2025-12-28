@@ -1,0 +1,26 @@
+# ==============================================================================
+# Tests/Live - Git Ignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+
+# Playwright test artifacts (screenshots, videos, traces)
+**/test-results/
+**/playwright-report/
+**/playwright/.cache/
+
+# Test config with real URLs (use config.example.json as template)
+tests/live/config.json
+.last-run.json
+
+# Vitest coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

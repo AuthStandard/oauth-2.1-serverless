@@ -1,0 +1,22 @@
+{
+  "name": "@oauth-server/scim-groups",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SCIM v2 Group Provisioning Module (RFC 7643, RFC 7644)",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@oauth-server/shared": "file:../../shared"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.17.9",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,104 @@
+[
+  {
+    "PK": "CLIENT#admin-cli",
+    "SK": "CONFIG",
+    "GSI1PK": "CLIENTS",
+    "GSI1SK": "admin-cli",
+    "entityType": "CLIENT",
+    "clientId": "admin-cli",
+    "clientName": "Admin CLI",
+    "clientType": "CONFIDENTIAL",
+    "redirectUris": [],
+    "grantTypes": ["client_credentials"],
+    "authStrategyId": "password",
+    "allowedScopes": ["openid", "admin"],
+    "tokenLifetimes": {
+      "accessToken": 3600,
+      "refreshToken": 86400,
+      "authorizationCode": 600
+    },
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "PK": "CLIENT#test-app",
+    "SK": "CONFIG",
+    "GSI1PK": "CLIENTS",
+    "GSI1SK": "test-app",
+    "entityType": "CLIENT",
+    "clientId": "test-app",
+    "clientName": "Test Application",
+    "clientType": "CONFIDENTIAL",
+    "redirectUris": ["https://example.com/callback", "http://localhost:3000/callback"],
+    "grantTypes": ["authorization_code", "refresh_token"],
+    "authStrategyId": "password",
+    "allowedScopes": ["openid", "profile", "email"],
+    "tokenLifetimes": {
+      "accessToken": 3600,
+      "refreshToken": 2592000,
+      "authorizationCode": 600
+    },
+    "postLogoutRedirectUris": ["https://example.com/logout", "http://localhost:3000/logout"],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "PK": "CLIENT#test-public-app",
+    "SK": "CONFIG",
+    "GSI1PK": "CLIENTS",
+    "GSI1SK": "test-public-app",
+    "entityType": "CLIENT",
+    "clientId": "test-public-app",
+    "clientName": "Test Public App (SPA)",
+    "clientType": "PUBLIC",
+    "redirectUris": ["https://example.com/callback", "http://localhost:3000/callback"],
+    "grantTypes": ["authorization_code", "refresh_token"],
+    "authStrategyId": "password",
+    "allowedScopes": ["openid", "profile", "email"],
+    "tokenLifetimes": {
+      "accessToken": 3600,
+      "refreshToken": 604800,
+      "authorizationCode": 600
+    },
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "PK": "USER#test-user-001",
+    "SK": "PROFILE",
+    "GSI1PK": "EMAIL#testuser@example.com",
+    "GSI1SK": "USER",
+    "entityType": "USER",
+    "sub": "test-user-001",
+    "email": "testuser@example.com",
+    "emailVerified": true,
+    "zoneinfo": "America/New_York",
+    "password": "TestPassword123!",
+    "profile": {
+      "givenName": "Test",
+      "familyName": "User"
+    },
+    "status": "ACTIVE",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "PK": "USER#test-user-002",
+    "SK": "PROFILE",
+    "GSI1PK": "EMAIL#admin@example.com",
+    "GSI1SK": "USER",
+    "entityType": "USER",
+    "sub": "test-user-002",
+    "email": "admin@example.com",
+    "emailVerified": true,
+    "zoneinfo": "America/New_York",
+    "password": "AdminPassword123!",
+    "profile": {
+      "givenName": "Admin",
+      "familyName": "User"
+    },
+    "status": "ACTIVE",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]

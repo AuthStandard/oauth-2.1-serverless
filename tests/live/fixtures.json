@@ -1,0 +1,29 @@
+{
+  "clients": {
+    "admin-cli": {
+      "client_id": "admin-cli",
+      "client_secret": "9d5a682f2dcd2480972a66574781316705075bde57b27a8291d0e22c8bad649f"
+    },
+    "test-app": {
+      "client_id": "test-app",
+      "client_secret": "4f75ce5b64376ef3c818aa554543a1fc93c9525f9d76dfbabdf76ba77570f6ed",
+      "redirect_uri": "https://example.com/callback"
+    },
+    "test-public-app": {
+      "client_id": "test-public-app",
+      "redirect_uri": "https://example.com/callback"
+    }
+  },
+  "users": {
+    "test-user-001": {
+      "email": "testuser@example.com",
+      "password": "TestPassword123!",
+      "sub": "test-user-001"
+    },
+    "test-user-002": {
+      "email": "admin@example.com",
+      "password": "AdminPassword123!",
+      "sub": "test-user-002"
+    }
+  }
+}

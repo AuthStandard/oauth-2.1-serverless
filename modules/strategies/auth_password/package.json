@@ -1,0 +1,32 @@
+{
+    "name": "@oauth-server/auth-password",
+    "version": "0.0.1",
+    "description": "Password authentication strategy for OAuth Server",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "prebuild": "compile-templates --out src/templates --templates login",
+        "build": "node esbuild.config.mjs",
+        "build:types": "tsc --emitDeclarationOnly",
+        "clean": "rm -rf dist src/templates",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@oauth-server/shared": "file:../../shared",
+        "@oauth-server/templates": "file:../../../templates",
+        "handlebars": "^4.7.8",
+        "hash-wasm": "^4.12.0"
+    },
+    "devDependencies": {
+        "@aws-sdk/client-dynamodb": "^3.0.0",
+        "@aws-sdk/lib-dynamodb": "^3.0.0",
+        "@types/aws-lambda": "^8.10.0",
+        "@types/node": "^20.0.0",
+        "esbuild": "^0.24.0",
+        "typescript": "^5.0.0"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "license": "MIT"
+}

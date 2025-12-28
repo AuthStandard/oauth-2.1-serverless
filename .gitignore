@@ -1,0 +1,74 @@
+# ==============================================================================
+# OAuth Server - Git Ignore
+# ==============================================================================
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+
+# Local backend (if not using S3)
+terraform.tfstate.d/
+
+# Environment-specific secrets (never commit!)
+*.auto.tfvars
+*.secrets.tfvars
+.env
+.envrc
+secrets.tfvars
+
+# Node.js
+node_modules/
+dist/
+*.tgz
+.npm
+.node_repl_history
+
+# Generated templates (compiled from templates/*.html)
+**/src/templates/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+.nyc_output/
+
+# Playwright test artifacts (screenshots, videos, traces)
+**/test-results/
+**/playwright-report/
+**/playwright/.cache/
+
+# Archives
+*.zip
+
+# Local data
+.data/
+
+# Lambda deployment packages
+modules/**/dist/*.zip
+.dist
+# Config with secrets (template is ok)
+# config.mk  <-- Uncomment if you add secrets to config.mk

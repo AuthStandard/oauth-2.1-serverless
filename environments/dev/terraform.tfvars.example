@@ -1,0 +1,102 @@
+# ==============================================================================
+# OAuth Server - Configuration Template
+# ==============================================================================
+# SETUP INSTRUCTIONS:
+#   1. Copy this file: cp terraform.tfvars.example terraform.tfvars
+#   2. Generate CSRF secret: openssl rand -hex 32
+#   3. Update cors_allowed_origins with your frontend URLs
+#   4. Configure production settings (see comments below)
+#   5. Set TF_STATE_BUCKET in config.mk
+#   6. Deploy: make init && make plan && make apply
+#
+# SECURITY NOTES:
+#   - terraform.tfvars is gitignored - never commit secrets
+#   - Generate unique csrf_secret for each environment
+#   - Use explicit CORS origins, never wildcards
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Project
+# ------------------------------------------------------------------------------
+project_name = "oauth-server"
+environment  = "dev"                    # dev, staging, or prod
+aws_region   = "us-east-1"
+domain_name  = ""                       # Leave empty to use API Gateway URL
+
+# ------------------------------------------------------------------------------
+# Security
+# CRITICAL: Generate a unique secret before deployment!
+# Command: openssl rand -hex 32
+# ------------------------------------------------------------------------------
+csrf_secret            = "GENERATE_WITH_openssl_rand_-hex_32_BEFORE_DEPLOY"
+cors_allowed_origins   = ["https://your-app.example.com"]
+cors_allow_credentials = false
+cors_max_age           = 86400
+
+# ------------------------------------------------------------------------------
+# DynamoDB
+# Production: Set both to true for data protection and SOC2 compliance
+# ------------------------------------------------------------------------------
+enable_deletion_protection    = false
+enable_point_in_time_recovery = false
+
+# ------------------------------------------------------------------------------
+# KMS
+# Production: Use 30 days to allow recovery from accidental deletion
+# ------------------------------------------------------------------------------
+kms_key_deletion_window_days = 7
+
+# JWT Key ID (kid) - Identifier embedded in JWT headers and JWKS endpoint.
+#
+# PURPOSE:
+# - Included in every signed JWT's header as the "kid" claim
+# - Clients fetch JWKS and match "kid" to find the correct public key for verification
+# - Enables key rotation without immediately invalidating existing tokens
+#
+# GRACEFUL KEY ROTATION (normal operations):
+# 1. Create new KMS key, set new jwt_key_id (e.g., "jwt-key-2")
+# 2. JWKS endpoint serves BOTH old and new public keys
+# 3. New tokens signed with new key, old tokens still verify with old key
+# 4. Wait for old tokens to expire (access_token TTL + refresh_token TTL)
+# 5. Remove old public key from JWKS, schedule old KMS key for deletion
+#
+# IMMEDIATE KEY REVOCATION (security incidents):
+# Change jwt_key_id WITHOUT serving old key in JWKS to instantly invalidate
+# all existing tokens. Use when:
+# - Private key compromised or suspected breach
+# - Need to force logout all users immediately
+# - Compliance requires immediate session termination
+#
+# NOTE: AWS does NOT auto-rotate asymmetric keys. Rotation is always manual.
+jwt_key_id = "jwt-key-1"
+
+# ------------------------------------------------------------------------------
+# Logging
+# Production: SOC2 requires minimum 365 days for audit trails
+# ------------------------------------------------------------------------------
+log_retention_days = 30
+
+# ------------------------------------------------------------------------------
+# API Gateway Throttling
+# Protects against DDoS attacks and ensures fair usage across clients.
+# Production: Increase limits based on expected traffic patterns.
+# Dev: Lower limits to catch issues early and reduce costs.
+# ------------------------------------------------------------------------------
+throttling_burst_limit = 1000   # Maximum concurrent requests (handle spikes)
+throttling_rate_limit  = 500    # Requests per second (sustained rate)
+
+# ------------------------------------------------------------------------------
+# Features
+# Enable only the authentication strategies you need
+# ------------------------------------------------------------------------------
+enable_password_strategy = true
+enable_saml_strategy     = false
+enable_mfa_totp_strategy = false
+
+# ------------------------------------------------------------------------------
+# Token Lifetimes
+# Configure token expiration per your security requirements
+# ------------------------------------------------------------------------------
+access_token_ttl  = 3600      # 1 hour (default)
+id_token_ttl      = 3600      # 1 hour (typically matches access token)
+refresh_token_ttl = 2592000   # 30 days (default)

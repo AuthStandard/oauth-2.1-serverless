@@ -1,0 +1,21 @@
+{
+  "apiBaseUrl": "https://ylf6m8ttk7.execute-api.us-east-1.amazonaws.com",
+  "dynamodbTable": "oauth-server-dev-core",
+  "awsRegion": "us-east-1",
+  "endpoints": {
+    "discovery": "/.well-known/openid-configuration",
+    "authorize": "/authorize",
+    "token": "/token",
+    "keys": "/keys",
+    "userinfo": "/userinfo",
+    "revoke": "/revoke",
+    "introspect": "/introspect",
+    "logout": "/connect/logout",
+    "register": "/connect/register",
+    "scimUsers": "/scim/v2/Users",
+    "scimGroups": "/scim/v2/Groups",
+    "scimMe": "/scim/v2/Me",
+    "samlMetadata": "/auth/saml/metadata",
+    "samlCallback": "/auth/saml/callback"
+  }
+}

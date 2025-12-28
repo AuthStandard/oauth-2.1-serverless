@@ -1,0 +1,33 @@
+{
+  "name": "@oauth-server/shared",
+  "version": "0.0.1",
+  "description": "Shared utilities for OAuth Server Lambda functions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-ses": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@types/aws-lambda": "^8.10.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "license": "MIT"
+}
