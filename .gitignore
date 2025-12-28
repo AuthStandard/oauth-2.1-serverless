@@ -15,7 +15,7 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
-.terraform.lock.hcl
+**/.terraform.lock.hcl
 
 # Local backend (if not using S3)
 terraform.tfstate.d/
