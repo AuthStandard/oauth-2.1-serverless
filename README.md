@@ -1,8 +1,9 @@
 # OAuth 2.1 Serverless Identity Provider
 
-> **Note:** This project is under active development. Unit test coverage is in progress.
+> [!NOTE]
+> This project is under active development. Unit test coverage is in progress.
 
-A production-ready, fully serverless OAuth 2.1 and OpenID Connect identity provider built on AWS Lambda, API Gateway, and DynamoDB. Zero servers to manage, scales automatically, pay only for what you use.
+An open-source, standards-compliant OAuth 2.1 and OpenID Connect implementation. Built for SOC 2 environments on AWS Lambda, API Gateway, and DynamoDB.
 
 ## Why This Exists
 
@@ -35,6 +36,18 @@ Most identity solutions are either expensive SaaS products or complex self-hoste
 - Refresh token rotation on every use
 - KMS-based JWT signing (asymmetric RS256)
 - Configurable token lifetimes
+
+## Enterprise Ready
+
+Built with compliance and auditability in mind:
+
+- **SOC 2 Type II compatible** - Point-in-time recovery, audit logging, encryption at rest
+- **OAuth 2.1 compliant** - Implements latest security best practices (mandatory PKCE, no implicit flow)
+- **OpenID Connect certified patterns** - Standard discovery, JWKS, and token formats
+- **SCIM 2.0** - Automated user provisioning for enterprise identity sync
+- **SAML 2.0** - Federate with existing enterprise IdPs
+- **Audit trail** - CloudWatch logs with configurable retention (365+ days for compliance)
+- **Infrastructure as Code** - Reproducible deployments, change tracking via Terraform
 
 ## Deployment
 
