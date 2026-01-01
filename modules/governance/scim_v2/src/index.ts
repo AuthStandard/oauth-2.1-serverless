@@ -13,7 +13,9 @@
  * - Supports: employeeNumber, costCenter, organization, division, department, manager
  *
  * Security:
- * - Admin endpoints require Bearer token authentication
+ * - Admin endpoints require valid JWT with scim:users scope
+ * - JWT signature verified against KMS public key
+ * - Token expiration and issuer validation
  * - /Me endpoints use User Access Token (extracts sub from JWT)
  * - /Me restricts updates to safe fields only (name, locale, zoneinfo)
  * - SOC2-compliant structured audit logging
@@ -27,13 +29,15 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { createLogger, withContext } from '@oauth-server/shared';
+import { KMSClient, GetPublicKeyCommand } from '@aws-sdk/client-kms';
+import { createVerify } from 'node:crypto';
+import { createLogger, withContext, base64UrlDecode } from '@oauth-server/shared';
 import type { EnvConfig, ScimUserCreateRequest, ScimPatchRequest } from './types';
 import { handlePostUser } from './post-user';
 import { handleGetUser } from './get-user';
 import { handlePatchUser } from './patch-user';
 import { handleGetMe, handlePatchMe } from './me';
-import { scimBadRequest, scimServerError, scimUnauthorized } from './responses';
+import { scimBadRequest, scimServerError, scimUnauthorized, scimForbidden } from './responses';
 
 // =============================================================================
 // Environment Configuration
@@ -42,14 +46,16 @@ import { scimBadRequest, scimServerError, scimUnauthorized } from './responses';
 function getEnvConfig(): EnvConfig {
     const tableName = process.env.TABLE_NAME;
     const issuer = process.env.ISSUER;
+    const kmsKeyId = process.env.KMS_KEY_ID;
 
     if (!tableName) throw new Error('TABLE_NAME environment variable is required');
     if (!issuer) throw new Error('ISSUER environment variable is required');
+    if (!kmsKeyId) throw new Error('KMS_KEY_ID environment variable is required');
 
     // SCIM base URL derived from issuer
     const scimBaseUrl = `${issuer}/scim/v2`;
 
-    return { tableName, issuer, scimBaseUrl };
+    return { tableName, issuer, scimBaseUrl, kmsKeyId };
 }
 
 // =============================================================================
@@ -67,6 +73,209 @@ function getDocClient(): DynamoDBDocumentClient {
     }
     return docClient;
 }
+
+// =============================================================================
+// KMS Client & Public Key Cache
+// =============================================================================
+
+let kmsClient: KMSClient | null = null;
+let publicKeyCache: { pem: string; keyId: string } | null = null;
+
+function getKmsClient(): KMSClient {
+    if (!kmsClient) kmsClient = new KMSClient({});
+    return kmsClient;
+}
+
+async function getPublicKey(kmsKeyId: string): Promise<string> {
+    if (publicKeyCache?.keyId === kmsKeyId) return publicKeyCache.pem;
+
+    const result = await getKmsClient().send(new GetPublicKeyCommand({ KeyId: kmsKeyId }));
+    if (!result.PublicKey) throw new Error('KMS returned no public key');
+
+    const base64Key = Buffer.from(result.PublicKey).toString('base64');
+    const pemLines = base64Key.match(/.{1,64}/g) ?? [];
+    const pem = `-----BEGIN PUBLIC KEY-----\n${pemLines.join('\n')}\n-----END PUBLIC KEY-----`;
+
+    publicKeyCache = { pem, keyId: kmsKeyId };
+    return pem;
+}
+
+// =============================================================================
+// JWT Token Verification - Enterprise Grade
+// =============================================================================
+
+/** Maximum allowed clock skew for iat validation (5 minutes) */
+const MAX_CLOCK_SKEW_SECONDS = 300;
+
+/** Maximum token age from iat to prevent replay attacks (24 hours) */
+const MAX_TOKEN_AGE_SECONDS = 86400;
+
+/** Required scope for SCIM User operations */
+const SCIM_USERS_SCOPE = 'scim:users';
+
+/** Required scope for SCIM self-service /Me operations */
+const SCIM_ME_SCOPE = 'openid';
+
+interface AccessTokenPayload {
+    readonly iss: string;
+    readonly sub: string;
+    readonly aud: string | readonly string[];
+    readonly exp: number;
+    readonly iat: number;
+    readonly scope: string;
+    readonly client_id: string;
+    readonly jti?: string;
+}
+
+interface TokenValidationResult {
+    readonly valid: boolean;
+    readonly payload?: AccessTokenPayload;
+    readonly error?: string;
+    readonly errorCode?: 'invalid_token' | 'insufficient_scope' | 'token_revoked';
+}
+
+/**
+ * Enterprise-grade access token verification.
+ * 
+ * Validates per RFC 9068 (JWT Access Tokens) and industry best practices:
+ * 1. JWT structure (header.payload.signature)
+ * 2. Algorithm is RS256 (asymmetric, KMS-compatible)
+ * 3. Cryptographic signature via KMS public key
+ * 4. Expiration check (exp claim)
+ * 5. Not-before check with clock skew (iat claim)
+ * 6. Maximum token age (iat must be within 24 hours)
+ * 7. Issuer validation (iss claim)
+ * 8. Audience validation (aud claim)
+ * 
+ * @param token - The JWT access token string
+ * @param publicKey - PEM-encoded public key from KMS
+ * @param expectedIssuer - Expected issuer URL for validation
+ * @returns Validation result with payload or error details
+ */
+function verifyAccessToken(
+    token: string,
+    publicKey: string,
+    expectedIssuer: string
+): TokenValidationResult {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+        return { valid: false, error: 'Malformed JWT: expected 3 parts', errorCode: 'invalid_token' };
+    }
+
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    try {
+        // 1. Decode and validate header
+        const header = JSON.parse(base64UrlDecode(headerB64).toString('utf8')) as { alg?: string; typ?: string };
+        if (header.alg !== 'RS256') {
+            return { valid: false, error: `Unsupported algorithm: ${header.alg}`, errorCode: 'invalid_token' };
+        }
+
+        // 2. Decode payload
+        const payload = JSON.parse(base64UrlDecode(payloadB64).toString('utf8')) as AccessTokenPayload;
+
+        // 3. Verify cryptographic signature
+        const verifier = createVerify('RSA-SHA256');
+        verifier.update(`${headerB64}.${payloadB64}`);
+        if (!verifier.verify(publicKey, base64UrlDecode(signatureB64))) {
+            return { valid: false, error: 'Invalid signature', errorCode: 'invalid_token' };
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+
+        // 4. Validate expiration (exp)
+        if (!payload.exp || payload.exp <= now) {
+            return { valid: false, error: 'Token has expired', errorCode: 'invalid_token' };
+        }
+
+        // 5. Validate issued-at with clock skew (iat)
+        if (!payload.iat) {
+            return { valid: false, error: 'Missing iat claim', errorCode: 'invalid_token' };
+        }
+        if (payload.iat > now + MAX_CLOCK_SKEW_SECONDS) {
+            return { valid: false, error: 'Token issued in the future', errorCode: 'invalid_token' };
+        }
+
+        // 6. Validate maximum token age (prevent replay of old tokens)
+        const tokenAge = now - payload.iat;
+        if (tokenAge > MAX_TOKEN_AGE_SECONDS) {
+            return { valid: false, error: 'Token exceeds maximum age', errorCode: 'invalid_token' };
+        }
+
+        // 7. Validate issuer (iss)
+        if (payload.iss !== expectedIssuer) {
+            return { valid: false, error: `Invalid issuer: expected ${expectedIssuer}`, errorCode: 'invalid_token' };
+        }
+
+        // 8. Validate audience (aud) - token must be intended for this issuer or contain it in array
+        const expectedAudience = expectedIssuer;
+        const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+        if (!audiences.includes(expectedAudience)) {
+            return { valid: false, error: 'Token not intended for this audience', errorCode: 'invalid_token' };
+        }
+
+        return { valid: true, payload };
+    } catch (e) {
+        const error = e as Error;
+        return { valid: false, error: `Token parsing failed: ${error.message}`, errorCode: 'invalid_token' };
+    }
+}
+
+/**
+ * Validate that the token has the required scope.
+ * 
+ * @param payload - Verified token payload
+ * @param requiredScope - Space-delimited required scopes (any one must match)
+ * @returns True if token has required scope
+ */
+function hasRequiredScope(payload: AccessTokenPayload, requiredScope: string): boolean {
+    const tokenScopes = payload.scope.split(' ').filter(s => s.length > 0);
+    const required = requiredScope.split(' ').filter(s => s.length > 0);
+    return required.some(r => tokenScopes.includes(r));
+}
+
+/**
+ * Check if a token has been revoked.
+ * 
+ * Queries DynamoDB for token revocation status using the jti (JWT ID) claim.
+ * This adds latency but provides defense-in-depth against compromised tokens.
+ * 
+ * @param jti - JWT ID claim from the token
+ * @param client - DynamoDB document client
+ * @param tableName - DynamoDB table name
+ * @returns True if token is revoked
+ */
+async function isTokenRevoked(
+    jti: string | undefined,
+    client: DynamoDBDocumentClient,
+    tableName: string
+): Promise<boolean> {
+    if (!jti) {
+        // Tokens without jti cannot be individually revoked
+        // This is acceptable for short-lived tokens
+        return false;
+    }
+
+    try {
+        const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
+        const result = await client.send(
+            new GetCommand({
+                TableName: tableName,
+                Key: {
+                    PK: `TOKEN#${jti}`,
+                    SK: 'REVOKED',
+                },
+                ProjectionExpression: 'revokedAt',
+            })
+        );
+        return !!result.Item;
+    } catch {
+        // On error, fail open to avoid blocking legitimate requests
+        // This should be monitored via CloudWatch alarms
+        return false;
+    }
+}
+
 
 // =============================================================================
 // Request Parsing
@@ -90,55 +299,6 @@ function parseJsonBody<T>(event: APIGatewayProxyEventV2): T | null {
             body = Buffer.from(body, 'base64').toString('utf-8');
         }
         return JSON.parse(body) as T;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Validate Bearer token authentication.
- * In production, this should validate against an access token.
- * For now, we just check that a Bearer token is present.
- */
-function validateAuth(authHeader: string | undefined): boolean {
-    if (!authHeader) {
-        return false;
-    }
-    return authHeader.toLowerCase().startsWith('bearer ');
-}
-
-/**
- * Extract user ID (sub) from Bearer token for /Me endpoint.
- * Decodes the JWT payload without verification (verification should be done by API Gateway or middleware).
- *
- * @param authHeader - Authorization header value
- * @returns User ID (sub) or null if extraction fails
- */
-function extractUserIdFromToken(authHeader: string | undefined): string | null {
-    if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
-        return null;
-    }
-
-    const token = authHeader.substring(7).trim();
-    if (!token) {
-        return null;
-    }
-
-    try {
-        // JWT format: header.payload.signature
-        const parts = token.split('.');
-        if (parts.length !== 3) {
-            return null;
-        }
-
-        // Decode payload (base64url)
-        const payloadBase64 = parts[1]
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
-        const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
-        const payload = JSON.parse(payloadJson) as { sub?: string };
-
-        return payload.sub || null;
     } catch {
         return null;
     }
@@ -206,28 +366,72 @@ export const handler = async (
             });
         }
 
-        // Validate authentication
+        // =====================================================================
+        // Authentication & Authorization (Enterprise-Grade)
+        // =====================================================================
+
+        // Extract Bearer token
         const authHeader = event.headers?.['authorization'];
-        if (!validateAuth(authHeader)) {
-            return withCors(scimUnauthorized());
+        if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+            audit.log({
+                action: 'CLIENT_AUTH_FAILED',
+                actor: { type: 'ANONYMOUS' },
+                details: { reason: 'missing_bearer_token', path },
+            });
+            return withCors(scimUnauthorized('Missing or invalid Authorization header'));
         }
 
+        const token = authHeader.slice(7);
+
+        // Verify JWT signature and all claims
+        const publicKey = await getPublicKey(config.kmsKeyId);
+        const validationResult = verifyAccessToken(token, publicKey, config.issuer);
+
+        if (!validationResult.valid || !validationResult.payload) {
+            logger.warn('Access token verification failed', { error: validationResult.error });
+            audit.log({
+                action: 'CLIENT_AUTH_FAILED',
+                actor: { type: 'ANONYMOUS' },
+                details: { reason: validationResult.error, path },
+            });
+            return withCors(scimUnauthorized(validationResult.error || 'Invalid access token'));
+        }
+
+        const tokenPayload = validationResult.payload;
         const client = getDocClient();
+
+        // Check token revocation
+        const revoked = await isTokenRevoked(tokenPayload.jti, client, config.tableName);
+        if (revoked) {
+            logger.warn('Revoked token used', { sub: tokenPayload.sub, jti: tokenPayload.jti });
+            audit.log({
+                action: 'CLIENT_AUTH_FAILED',
+                actor: { type: 'USER', sub: tokenPayload.sub },
+                details: { reason: 'token_revoked', jti: tokenPayload.jti },
+            });
+            return withCors(scimUnauthorized('Token has been revoked'));
+        }
 
         let response: APIGatewayProxyResultV2;
 
         // Route /Me endpoints (RFC 7644 Section 3.11)
+        // /Me requires openid scope - any authenticated user can access their own profile
         if (isMeEndpoint(path)) {
-            const tokenUserId = extractUserIdFromToken(authHeader);
-            if (!tokenUserId) {
-                response = scimUnauthorized('Invalid or missing user identity in token');
-                return withCors(response);
+            // Scope check for /Me endpoints
+            if (!hasRequiredScope(tokenPayload, SCIM_ME_SCOPE)) {
+                logger.warn('Insufficient scope for /Me', { sub: tokenPayload.sub, scope: tokenPayload.scope });
+                audit.log({
+                    action: 'CLIENT_AUTH_FAILED',
+                    actor: { type: 'USER', sub: tokenPayload.sub },
+                    details: { reason: 'insufficient_scope', required: SCIM_ME_SCOPE, provided: tokenPayload.scope },
+                });
+                return withCors(scimForbidden(`Required scope: ${SCIM_ME_SCOPE}`));
             }
 
             switch (method) {
                 case 'GET': {
                     // GET /scim/v2/Me - Retrieve authenticated user's profile
-                    response = await handleGetMe(tokenUserId, config, client);
+                    response = await handleGetMe(tokenPayload.sub, config, client);
                     break;
                 }
 
@@ -245,7 +449,7 @@ export const handler = async (
                         break;
                     }
 
-                    response = await handlePatchMe(tokenUserId, body, config, client, audit, requestId);
+                    response = await handlePatchMe(tokenPayload.sub, body, config, client, audit, requestId);
                     break;
                 }
 
@@ -254,6 +458,20 @@ export const handler = async (
             }
 
             return withCors(response);
+        }
+
+        // =====================================================================
+        // /Users Admin Endpoints - Require scim:users scope
+        // =====================================================================
+
+        if (!hasRequiredScope(tokenPayload, SCIM_USERS_SCOPE)) {
+            logger.warn('Insufficient scope for /Users', { sub: tokenPayload.sub, scope: tokenPayload.scope });
+            audit.log({
+                action: 'CLIENT_AUTH_FAILED',
+                actor: { type: 'USER', sub: tokenPayload.sub },
+                details: { reason: 'insufficient_scope', required: SCIM_USERS_SCOPE, provided: tokenPayload.scope },
+            });
+            return withCors(scimForbidden(`Required scope: ${SCIM_USERS_SCOPE}`));
         }
 
         // Route /Users endpoints

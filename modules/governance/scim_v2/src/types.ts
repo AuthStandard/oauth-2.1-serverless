@@ -23,6 +23,8 @@ export interface EnvConfig {
     readonly issuer: string;
     /** SCIM base URL (derived from issuer) */
     readonly scimBaseUrl: string;
+    /** KMS key ID for JWT signature verification */
+    readonly kmsKeyId: string;
 }
 
 // =============================================================================
