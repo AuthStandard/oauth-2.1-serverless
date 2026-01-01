@@ -129,3 +129,20 @@ variable "lambda_log_retention_days" {
     error_message = "Log retention must be a valid CloudWatch retention period."
   }
 }
+
+# ------------------------------------------------------------------------------
+# Client Registration Security (RFC 7591 Section 1.2)
+# ------------------------------------------------------------------------------
+
+variable "initial_access_token" {
+  description = "Initial Access Token for protecting client registration endpoint. If set, POST /connect/register requires this token. Generate with: openssl rand -base64 32"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "allow_open_registration" {
+  description = "Allow client registration without Initial Access Token. Set to false in production unless initial_access_token is configured."
+  type        = bool
+  default     = false
+}

@@ -19,7 +19,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { createLogger, withContext, serverError, error, corsPreflight, withCors } from '@oauth-server/shared';
+import { createLogger, withContext, serverError, error, corsPreflight, withCors, timingSafeStringEqual } from '@oauth-server/shared';
 import type { EnvConfig, ClientRegistrationRequest } from './types';
 import { handleCreateClient } from './create';
 import { handleReadClient } from './read';
@@ -40,7 +40,11 @@ function getEnvConfig(): EnvConfig {
     // Registration endpoint is derived from issuer
     const registrationEndpoint = `${issuer}/connect/register`;
 
-    return { tableName, issuer, registrationEndpoint };
+    // Initial Access Token for protecting open registration (RFC 7591 Section 1.2)
+    const initialAccessToken = process.env.INITIAL_ACCESS_TOKEN;
+    const allowOpenRegistration = process.env.ALLOW_OPEN_REGISTRATION === 'true';
+
+    return { tableName, issuer, registrationEndpoint, initialAccessToken, allowOpenRegistration };
 }
 
 // =============================================================================
@@ -86,6 +90,65 @@ function parseJsonBody(event: APIGatewayProxyEventV2): ClientRegistrationRequest
     }
 }
 
+// =============================================================================
+// Initial Access Token Validation (RFC 7591 Section 1.2)
+// =============================================================================
+
+interface IatValidationResult {
+    valid: boolean;
+    error?: string;
+}
+
+/**
+ * Validate Initial Access Token for client registration.
+ *
+ * Per RFC 7591 Section 1.2, the authorization server MAY require an
+ * Initial Access Token to protect the registration endpoint from
+ * unauthorized access.
+ *
+ * Security:
+ * - Uses constant-time comparison to prevent timing attacks
+ * - Supports both open registration and protected registration modes
+ *
+ * @param authHeader - Authorization header from request
+ * @param config - Environment configuration
+ * @returns Validation result
+ */
+function validateInitialAccessToken(
+    authHeader: string | undefined,
+    config: EnvConfig
+): IatValidationResult {
+    // If no Initial Access Token is configured and open registration is allowed
+    if (!config.initialAccessToken && config.allowOpenRegistration) {
+        return { valid: true };
+    }
+
+    // If Initial Access Token is configured, it MUST be provided
+    if (config.initialAccessToken) {
+        if (!authHeader) {
+            return { valid: false, error: 'Initial Access Token required for client registration' };
+        }
+
+        // Extract Bearer token
+        const match = authHeader.match(/^Bearer\s+(.+)$/i);
+        if (!match) {
+            return { valid: false, error: 'Invalid Authorization header format. Use: Bearer <token>' };
+        }
+
+        const providedToken = match[1];
+
+        // Constant-time comparison to prevent timing attacks
+        if (!timingSafeStringEqual(providedToken, config.initialAccessToken)) {
+            return { valid: false, error: 'Invalid Initial Access Token' };
+        }
+
+        return { valid: true };
+    }
+
+    // No Initial Access Token configured and open registration not allowed
+    return { valid: false, error: 'Client registration is not available' };
+}
+
 
 
 // =============================================================================
@@ -111,7 +174,9 @@ export const handler = async (
 
         // Handle CORS preflight
         if (method === 'OPTIONS') {
-            return corsPreflight('*');
+            // Use configured allowed origins or restrict to issuer domain
+            const allowedOrigin = config.issuer;
+            return corsPreflight(allowedOrigin);
         }
 
         const client = getDocClient();
@@ -123,6 +188,18 @@ export const handler = async (
         switch (method) {
             case 'POST': {
                 // POST /connect/register - Create client
+                // RFC 7591 Section 1.2: Initial Access Token protection
+                const iatValidation = validateInitialAccessToken(authHeader, config);
+                if (!iatValidation.valid) {
+                    audit.log({
+                        action: 'CLIENT_REGISTRATION_DENIED',
+                        actor: { type: 'ANONYMOUS' },
+                        details: { reason: iatValidation.error },
+                    });
+                    response = error(401, 'invalid_token', iatValidation.error || 'Invalid or missing Initial Access Token');
+                    break;
+                }
+
                 const contentType = event.headers?.['content-type'] || '';
                 if (!contentType.includes('application/json')) {
                     response = error(400, 'invalid_request', 'Content-Type must be application/json');
@@ -186,8 +263,9 @@ export const handler = async (
                 response = error(405, 'invalid_request', 'Method not allowed');
         }
 
-        // Add CORS headers
-        return withCors(response as Exclude<APIGatewayProxyResultV2, string>, '*');
+        // Add CORS headers (restrict to issuer domain for security)
+        const allowedOrigin = config.issuer;
+        return withCors(response as Exclude<APIGatewayProxyResultV2, string>, allowedOrigin);
     } catch (err) {
         const e = err as Error;
         logger.error('Client registry error', { error: e.message, stack: e.stack });

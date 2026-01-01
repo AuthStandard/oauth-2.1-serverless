@@ -88,6 +88,78 @@ variable "cors_max_age" {
 }
 
 # ------------------------------------------------------------------------------
+# Client Registration Security (RFC 7591)
+# ------------------------------------------------------------------------------
+
+variable "client_registration_token" {
+  description = "Initial Access Token for protecting client registration endpoint (RFC 7591 Section 1.2). If set, POST /connect/register requires this token. Generate with: openssl rand -base64 32"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "allow_open_client_registration" {
+  description = "Allow client registration without Initial Access Token. Set to false in production unless client_registration_token is configured."
+  type        = bool
+  default     = false
+}
+
+# ==============================================================================
+# Production Environment Validation
+# ==============================================================================
+# These validations ensure production deployments use secure settings.
+# They are implemented as local values with preconditions to provide
+# clear error messages when production requirements are not met.
+# ==============================================================================
+
+locals {
+  # Production security validations
+  _validate_prod_deletion_protection = (
+    var.environment != "prod" || var.enable_deletion_protection == true
+  )
+  _validate_prod_pitr = (
+    var.environment != "prod" || var.enable_point_in_time_recovery == true
+  )
+  _validate_prod_log_retention = (
+    var.environment != "prod" || var.log_retention_days >= 365
+  )
+  _validate_prod_kms_deletion = (
+    var.environment != "prod" || var.kms_key_deletion_window_days >= 30
+  )
+  _validate_prod_open_registration = (
+    var.environment != "prod" || var.allow_open_client_registration == false
+  )
+}
+
+# Production validation checks (will fail during plan if conditions not met)
+resource "null_resource" "production_validations" {
+  count = var.environment == "prod" ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = var.enable_deletion_protection == true
+      error_message = "PRODUCTION REQUIREMENT: enable_deletion_protection must be true for production deployments."
+    }
+    precondition {
+      condition     = var.enable_point_in_time_recovery == true
+      error_message = "PRODUCTION REQUIREMENT: enable_point_in_time_recovery must be true for SOC2 compliance."
+    }
+    precondition {
+      condition     = var.log_retention_days >= 365
+      error_message = "PRODUCTION REQUIREMENT: log_retention_days must be at least 365 for SOC2 compliance."
+    }
+    precondition {
+      condition     = var.kms_key_deletion_window_days >= 30
+      error_message = "PRODUCTION REQUIREMENT: kms_key_deletion_window_days must be 30 for production."
+    }
+    precondition {
+      condition     = var.allow_open_client_registration == false
+      error_message = "PRODUCTION REQUIREMENT: allow_open_client_registration must be false. Use client_registration_token instead."
+    }
+  }
+}
+
+# ------------------------------------------------------------------------------
 # DynamoDB Settings
 # ------------------------------------------------------------------------------
 

@@ -162,7 +162,10 @@ export function scimForbidden(detail: string = 'Insufficient permissions'): APIG
 /**
  * 404 Not Found - Resource does not exist.
  */
-export function scimNotFound(detail: string = 'Resource not found'): APIGatewayProxyResultV2 {
+export function scimNotFound(resourceType?: string, resourceId?: string): APIGatewayProxyResultV2 {
+    const detail = resourceType && resourceId
+        ? `${resourceType} with id '${resourceId}' not found`
+        : 'Resource not found';
     return scimError(404, detail);
 }
 

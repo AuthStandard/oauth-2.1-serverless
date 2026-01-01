@@ -248,7 +248,7 @@ export const handler = async (
                         { type: 'CLIENT', clientId: authResult.clientItem!.clientId },
                         {
                             tokenType: 'refresh_token',
-                            reason: 'user_logout',
+                            reason: 'client_revocation',
                             tokenHint: refreshToken.familyId,
                         }
                     );

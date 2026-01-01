@@ -40,6 +40,11 @@ output "gsi1_arn" {
   value       = "${aws_dynamodb_table.main.arn}/index/GSI1"
 }
 
+output "gsi2_arn" {
+  description = "GSI2 ARN for IAM policies requiring index query permissions (token family lookups, session queries)"
+  value       = "${aws_dynamodb_table.main.arn}/index/GSI2"
+}
+
 output "stream_arn" {
   description = "DynamoDB Streams ARN for Global Tables replication or event triggers"
   value       = aws_dynamodb_table.main.stream_arn

@@ -2,27 +2,51 @@
  * SAML Strategy - HTTP Response Helpers
  *
  * Standardized response builders for Lambda handlers.
+ * Includes SOC2-compliant security headers on all responses.
+ *
+ * @module strategies/auth_saml/response
  */
 
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
+
+// =============================================================================
+// Security Headers (SOC2 Compliance)
+// =============================================================================
+
+/**
+ * Security headers applied to all responses per SOC2 requirements.
+ * These headers protect against common web vulnerabilities.
+ */
+const SECURITY_HEADERS = {
+    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+} as const;
 
 // =============================================================================
 // Response Headers
 // =============================================================================
 
 const JSON_HEADERS = {
+    ...SECURITY_HEADERS,
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
     'Pragma': 'no-cache',
 } as const;
 
+/**
+ * XML headers for SP metadata endpoint.
+ * Note: Metadata is public and cacheable, but we still apply security headers.
+ * Cache reduced to 4 hours to allow faster certificate rotation propagation.
+ */
 const XML_HEADERS = {
+    ...SECURITY_HEADERS,
     'Content-Type': 'application/xml; charset=utf-8',
-    'Cache-Control': 'public, max-age=86400',
-    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'public, max-age=14400',
 } as const;
 
 const REDIRECT_HEADERS = {
+    ...SECURITY_HEADERS,
     'Cache-Control': 'no-store',
     'Pragma': 'no-cache',
 } as const;

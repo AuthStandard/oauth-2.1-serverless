@@ -306,6 +306,8 @@ module "client_registry" {
   api_gateway_execution_arn   = module.networking.api_gateway_execution_arn
   issuer                      = local.issuer
   lambda_log_retention_days   = var.log_retention_days
+  initial_access_token        = var.client_registration_token
+  allow_open_registration     = var.allow_open_client_registration
 }
 
 module "scim_v2" {
@@ -316,6 +318,8 @@ module "scim_v2" {
   dynamodb_table_name         = module.dynamodb_core.table_name
   dynamodb_table_arn          = module.dynamodb_core.table_arn
   dynamodb_encryption_key_arn = module.dynamodb_core.encryption_key_arn
+  kms_key_id                  = module.kms_keyring.key_id
+  kms_key_arn                 = module.kms_keyring.key_arn
   api_gateway_id              = module.networking.api_gateway_id
   api_gateway_execution_arn   = module.networking.api_gateway_execution_arn
   issuer                      = local.issuer

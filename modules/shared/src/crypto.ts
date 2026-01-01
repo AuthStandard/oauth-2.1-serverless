@@ -267,3 +267,47 @@ export function generateTokenFamilyId(): string {
     const hex = bytes.toString('hex');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+// =============================================================================
+// Constant-Time Comparison
+// =============================================================================
+
+/**
+ * Perform constant-time string comparison to prevent timing attacks.
+ *
+ * This function wraps Node.js crypto.timingSafeEqual with string handling.
+ * It's essential for comparing secrets, tokens, and other sensitive values
+ * where timing differences could leak information.
+ *
+ * @param a - First string to compare
+ * @param b - Second string to compare
+ * @returns True if strings are equal, false otherwise
+ *
+ * @example
+ * ```typescript
+ * if (timingSafeEqual(providedToken, expectedToken)) {
+ *   // Token is valid
+ * }
+ * ```
+ *
+ * @see RFC 9700 Section 4.8.2 - Timing Attack Prevention
+ */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+    // Different lengths are not equal, but we still need to avoid
+    // leaking length information through timing
+    if (a.length !== b.length) {
+        // Compare against itself to maintain constant time
+        const dummy = Buffer.from(a, 'utf-8');
+        timingSafeEqual(dummy, dummy);
+        return false;
+    }
+
+    try {
+        return timingSafeEqual(
+            Buffer.from(a, 'utf-8'),
+            Buffer.from(b, 'utf-8')
+        );
+    } catch {
+        return false;
+    }
+}

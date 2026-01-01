@@ -93,6 +93,26 @@ variable "issuer" {
   }
 }
 
+variable "kms_key_id" {
+  description = "KMS Key ID for JWT signature verification"
+  type        = string
+
+  validation {
+    condition     = length(var.kms_key_id) > 0
+    error_message = "KMS Key ID is required for JWT verification."
+  }
+}
+
+variable "kms_key_arn" {
+  description = "KMS Key ARN for IAM policy (GetPublicKey permission)"
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws:kms:", var.kms_key_arn))
+    error_message = "Must be a valid KMS key ARN."
+  }
+}
+
 # ------------------------------------------------------------------------------
 # Lambda Configuration
 # ------------------------------------------------------------------------------

@@ -34,6 +34,28 @@ cors_allow_credentials = false
 cors_max_age           = 86400
 
 # ------------------------------------------------------------------------------
+# Client Registration Security (RFC 7591)
+# Controls who can register new OAuth clients via POST /connect/register
+# ------------------------------------------------------------------------------
+# Option 1: Protected registration (recommended for production)
+#   - Set client_registration_token to a secure value
+#   - Only requests with this token can register clients
+#   - Generate with: openssl rand -base64 32
+#
+# Option 2: Open registration (development only)
+#   - Leave client_registration_token empty
+#   - Set allow_open_client_registration = true
+#   - Anyone can register clients (NOT recommended for production)
+#
+# Option 3: Disabled registration (most secure)
+#   - Leave both empty/false
+#   - Client registration endpoint returns 401
+#   - Clients must be created via other means (e.g., Terraform, CLI)
+# ------------------------------------------------------------------------------
+client_registration_token      = ""      # Generate with: openssl rand -base64 32
+allow_open_client_registration = true    # Set to false in production
+
+# ------------------------------------------------------------------------------
 # DynamoDB
 # Production: Set both to true for data protection and SOC2 compliance
 # ------------------------------------------------------------------------------

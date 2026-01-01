@@ -157,6 +157,10 @@ export interface EnvConfig {
     tableName: string;
     issuer: string;
     registrationEndpoint: string;
+    /** Initial Access Token for open registration protection (optional) */
+    initialAccessToken?: string;
+    /** Whether open registration is allowed (default: false if initialAccessToken is set) */
+    allowOpenRegistration?: boolean;
 }
 
 /**

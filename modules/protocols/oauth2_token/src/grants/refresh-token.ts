@@ -32,7 +32,7 @@
 
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'node:crypto';
 import { hashToken, AuditLogger, Logger } from '@oauth-server/shared';
 import { createSigner } from '../signer';
@@ -326,60 +326,78 @@ export async function handleRefreshTokenGrant(
     const newTokenHash = hashToken(newRefreshToken);
 
     // -------------------------------------------------------------------------
-    // Step 10: Mark Current Token as Rotated (Atomic Operation)
+    // Step 10 & 11: Atomic Token Rotation (TransactWriteCommand)
+    // Mark current token as rotated AND store new token in single transaction
+    // This prevents race conditions where old token is invalidated but new
+    // token storage fails, leaving user with no valid refresh token.
     // -------------------------------------------------------------------------
     try {
         await client.send(
-            new UpdateCommand({
-                TableName: config.tableName,
-                Key: { PK: `REFRESH#${tokenHash}`, SK: 'METADATA' },
-                UpdateExpression: 'SET rotated = :true, rotatedAt = :now, replacedByHash = :newHash, updatedAt = :now',
-                ConditionExpression: 'rotated = :false AND attribute_exists(PK)',
-                ExpressionAttributeValues: {
-                    ':true': true,
-                    ':false': false,
-                    ':now': now,
-                    ':newHash': newTokenHash,
-                },
+            new TransactWriteCommand({
+                TransactItems: [
+                    {
+                        // Mark current token as rotated
+                        Update: {
+                            TableName: config.tableName,
+                            Key: { PK: `REFRESH#${tokenHash}`, SK: 'METADATA' },
+                            UpdateExpression: 'SET rotated = :true, rotatedAt = :now, replacedByHash = :newHash, updatedAt = :now',
+                            ConditionExpression: 'rotated = :false AND attribute_exists(PK)',
+                            ExpressionAttributeValues: {
+                                ':true': true,
+                                ':false': false,
+                                ':now': now,
+                                ':newHash': newTokenHash,
+                            },
+                        },
+                    },
+                    {
+                        // Store new refresh token (preserve DPoP binding)
+                        Put: {
+                            TableName: config.tableName,
+                            Item: {
+                                PK: `REFRESH#${newTokenHash}`,
+                                SK: 'METADATA',
+                                GSI1PK: `USER#${refreshTokenItem.sub}`,
+                                GSI1SK: `REFRESH#${now}`,
+                                GSI2PK: `FAMILY#${refreshTokenItem.familyId}`,
+                                GSI2SK: `REFRESH#${now}`,
+                                ttl: nowEpoch + refreshTokenTtl,
+                                entityType: 'REFRESH_TOKEN',
+                                createdAt: now,
+                                updatedAt: now,
+                                tokenHash: newTokenHash,
+                                familyId: refreshTokenItem.familyId,
+                                rotated: false,
+                                clientId: refreshTokenItem.clientId,
+                                sub: refreshTokenItem.sub,
+                                scope: grantedScope,
+                                issuedAt: now,
+                                // Preserve DPoP binding from original token
+                                ...(dpopThumbprint && { dpopJkt: dpopThumbprint }),
+                            },
+                            // Ensure we don't overwrite an existing token (collision protection)
+                            ConditionExpression: 'attribute_not_exists(PK)',
+                        },
+                    },
+                ],
             })
         );
-    } catch (updateError) {
-        if ((updateError as Error).name === 'ConditionalCheckFailedException') {
-            log.warn('Refresh token race condition');
-            return errorResponse(400, 'invalid_grant', 'Refresh token has already been used');
+    } catch (txError) {
+        const errorName = (txError as Error).name;
+        if (errorName === 'TransactionCanceledException') {
+            // Check which condition failed
+            const cancelReasons = (txError as { CancellationReasons?: Array<{ Code?: string }> }).CancellationReasons;
+            if (cancelReasons?.[0]?.Code === 'ConditionalCheckFailed') {
+                log.warn('Refresh token race condition - token already rotated');
+                return errorResponse(400, 'invalid_grant', 'Refresh token has already been used');
+            }
+            if (cancelReasons?.[1]?.Code === 'ConditionalCheckFailed') {
+                log.error('Token hash collision detected', { newTokenHash });
+                return errorResponse(500, 'server_error', 'Token generation failed, please retry');
+            }
         }
-        throw updateError;
+        throw txError;
     }
-
-    // -------------------------------------------------------------------------
-    // Step 11: Store New Refresh Token (preserve DPoP binding)
-    // -------------------------------------------------------------------------
-    await client.send(
-        new PutCommand({
-            TableName: config.tableName,
-            Item: {
-                PK: `REFRESH#${newTokenHash}`,
-                SK: 'METADATA',
-                GSI1PK: `USER#${refreshTokenItem.sub}`,
-                GSI1SK: `REFRESH#${now}`,
-                GSI2PK: `FAMILY#${refreshTokenItem.familyId}`,
-                GSI2SK: `REFRESH#${now}`,
-                ttl: nowEpoch + refreshTokenTtl,
-                entityType: 'REFRESH_TOKEN',
-                createdAt: now,
-                updatedAt: now,
-                tokenHash: newTokenHash,
-                familyId: refreshTokenItem.familyId,
-                rotated: false,
-                clientId: refreshTokenItem.clientId,
-                sub: refreshTokenItem.sub,
-                scope: grantedScope,
-                issuedAt: now,
-                // Preserve DPoP binding from original token
-                ...(dpopThumbprint && { dpopJkt: dpopThumbprint }),
-            },
-        })
-    );
 
     // Audit token refresh
     audit.tokenRefreshed(

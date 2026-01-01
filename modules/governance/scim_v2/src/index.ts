@@ -36,6 +36,7 @@ import type { EnvConfig, ScimUserCreateRequest, ScimPatchRequest } from './types
 import { handlePostUser } from './post-user';
 import { handleGetUser } from './get-user';
 import { handlePatchUser } from './patch-user';
+import { handleDeleteUser } from './delete-user';
 import { handleGetMe, handlePatchMe } from './me';
 import { scimBadRequest, scimServerError, scimUnauthorized, scimForbidden } from './responses';
 
@@ -526,6 +527,16 @@ export const handler = async (
                 }
 
                 response = await handlePatchUser(userId, body, config, client, audit, requestId);
+                break;
+            }
+
+            case 'DELETE': {
+                // DELETE /scim/v2/Users/{id} - Delete user (RFC 7644 Section 3.6)
+                if (!userId) {
+                    response = scimBadRequest('Missing user ID in path');
+                    break;
+                }
+                response = await handleDeleteUser(userId, config, client, audit, requestId, tokenPayload.sub);
                 break;
             }
 

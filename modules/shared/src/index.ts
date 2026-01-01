@@ -144,6 +144,7 @@ export {
     generateCsrfToken,
     verifyCsrfToken,
     generateTokenFamilyId,
+    timingSafeStringEqual,
 } from './crypto';
 
 // =============================================================================

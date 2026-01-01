@@ -111,6 +111,7 @@ export interface AccessTokenPayload {
  * - auth_time (if max_age requested or auth_time_required)
  * - nonce (if provided in authorization request)
  * - at_hash (if issued with access token from authorization endpoint)
+ * - sid (for session management and RP-Initiated Logout)
  */
 export interface IdTokenPayload {
     /** Issuer - Authorization server URL */
@@ -127,6 +128,8 @@ export interface IdTokenPayload {
     readonly nbf: number;
     /** Time of user authentication (Unix timestamp) */
     readonly auth_time: number;
+    /** Session ID for session management and logout (OIDC Session Management) */
+    readonly sid?: string;
     /** Nonce from authorization request (replay protection) */
     readonly nonce?: string;
     /** Access token hash (left half of SHA-256, base64url encoded) */
@@ -254,6 +257,7 @@ export class KmsSigner {
      * Create an ID token per OpenID Connect Core 1.0.
      *
      * @param params - Token parameters including user claims
+     * @param params.sessionId - Session ID for OIDC Session Management and RP-Initiated Logout
      * @returns Signed JWT ID token
      */
     async createIdToken(params: {
@@ -262,6 +266,7 @@ export class KmsSigner {
         clientId: string;
         expiresIn: number;
         authTime: number;
+        sessionId?: string;
         nonce?: string;
         atHash?: string;
         email?: string;
@@ -277,6 +282,7 @@ export class KmsSigner {
             iat: now,
             nbf: now,
             auth_time: params.authTime,
+            ...(params.sessionId && { sid: params.sessionId }),
             ...(params.nonce && { nonce: params.nonce }),
             ...(params.atHash && { at_hash: params.atHash }),
             ...(params.email && { email: params.email }),

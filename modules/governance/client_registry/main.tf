@@ -189,8 +189,10 @@ resource "aws_lambda_function" "client_registry" {
 
   environment {
     variables = {
-      TABLE_NAME = var.dynamodb_table_name
-      ISSUER     = var.issuer
+      TABLE_NAME              = var.dynamodb_table_name
+      ISSUER                  = var.issuer
+      INITIAL_ACCESS_TOKEN    = var.initial_access_token
+      ALLOW_OPEN_REGISTRATION = tostring(var.allow_open_registration)
     }
   }
 

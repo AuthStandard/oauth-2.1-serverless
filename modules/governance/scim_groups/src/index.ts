@@ -220,6 +220,40 @@ async function isTokenRevoked(
 }
 
 // =============================================================================
+// CORS Headers
+// =============================================================================
+
+/**
+ * CORS headers for SCIM endpoints.
+ * Required for browser-based SCIM clients.
+ */
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+} as const;
+
+/**
+ * Add CORS headers to a response.
+ *
+ * @param response - API Gateway response
+ * @returns Response with CORS headers
+ */
+function withCors(response: APIGatewayProxyResultV2): APIGatewayProxyResultV2 {
+    if (typeof response === 'string') {
+        return response;
+    }
+    return {
+        ...response,
+        headers: {
+            ...response.headers,
+            ...CORS_HEADERS,
+        },
+    };
+}
+
+// =============================================================================
 // Request Parsing
 // =============================================================================
 
@@ -281,7 +315,7 @@ export const handler = async (
                 actor: { type: 'ANONYMOUS' },
                 details: { reason: 'missing_bearer_token', path },
             });
-            return scimUnauthorized('Missing or invalid Authorization header');
+            return withCors(scimUnauthorized('Missing or invalid Authorization header'));
         }
 
         const token = authHeader.slice(7);
@@ -297,7 +331,7 @@ export const handler = async (
                 actor: { type: 'ANONYMOUS' },
                 details: { reason: validationResult.error, path },
             });
-            return scimUnauthorized(validationResult.error || 'Invalid access token');
+            return withCors(scimUnauthorized(validationResult.error || 'Invalid access token'));
         }
 
         const tokenPayload = validationResult.payload;
@@ -311,7 +345,7 @@ export const handler = async (
                 actor: { type: 'USER', sub: tokenPayload.sub },
                 details: { reason: 'token_revoked', jti: tokenPayload.jti },
             });
-            return scimUnauthorized('Token has been revoked');
+            return withCors(scimUnauthorized('Token has been revoked'));
         }
 
         // Scope validation
@@ -322,55 +356,62 @@ export const handler = async (
                 actor: { type: 'USER', sub: tokenPayload.sub },
                 details: { reason: 'insufficient_scope', required: SCIM_GROUPS_SCOPE, provided: tokenPayload.scope },
             });
-            return scimForbidden(`Required scope: ${SCIM_GROUPS_SCOPE}`);
+            return withCors(scimForbidden(`Required scope: ${SCIM_GROUPS_SCOPE}`));
         }
 
         const groupId = extractGroupId(event);
+        let response: APIGatewayProxyResultV2;
 
         // Route request
         switch (method) {
             case 'POST': {
                 const body = parseJsonBody<ScimGroupCreateRequest>(event);
                 if (!body) {
-                    return scimBadRequest('Invalid JSON body', 'invalidSyntax');
+                    return withCors(scimBadRequest('Invalid JSON body', 'invalidSyntax'));
                 }
-                return handlePostGroup(body, config, client, audit);
+                response = await handlePostGroup(body, config, client, audit);
+                break;
             }
 
             case 'GET': {
                 if (groupId) {
-                    return handleGetGroup(groupId, config, client);
+                    response = await handleGetGroup(groupId, config, client);
                 } else {
                     const startIndex = parseInt(event.queryStringParameters?.startIndex || '1', 10);
                     const count = parseInt(event.queryStringParameters?.count || '100', 10);
-                    return handleListGroups(config, client, startIndex, count);
+                    response = await handleListGroups(config, client, startIndex, count);
                 }
+                break;
             }
 
             case 'PATCH': {
                 if (!groupId) {
-                    return scimBadRequest('Group ID is required', 'invalidValue');
+                    return withCors(scimBadRequest('Group ID is required', 'invalidValue'));
                 }
                 const body = parseJsonBody<ScimPatchRequest>(event);
                 if (!body) {
-                    return scimBadRequest('Invalid JSON body', 'invalidSyntax');
+                    return withCors(scimBadRequest('Invalid JSON body', 'invalidSyntax'));
                 }
-                return handlePatchGroup(groupId, body, config, client, audit, context.awsRequestId);
+                response = await handlePatchGroup(groupId, body, config, client, audit, context.awsRequestId);
+                break;
             }
 
             case 'DELETE': {
                 if (!groupId) {
-                    return scimBadRequest('Group ID is required', 'invalidValue');
+                    return withCors(scimBadRequest('Group ID is required', 'invalidValue'));
                 }
-                return handleDeleteGroup(groupId, config, client, audit, context.awsRequestId);
+                response = await handleDeleteGroup(groupId, config, client, audit, context.awsRequestId);
+                break;
             }
 
             default:
-                return scimBadRequest(`Method ${method} not allowed`, 'invalidValue');
+                return withCors(scimBadRequest(`Method ${method} not allowed`, 'invalidValue'));
         }
+
+        return withCors(response);
     } catch (err) {
         const e = err as Error;
         logger.error('SCIM Groups error', { error: e.message, stack: e.stack });
-        return scimServerError('An unexpected error occurred');
+        return withCors(scimServerError('An unexpected error occurred'));
     }
 };

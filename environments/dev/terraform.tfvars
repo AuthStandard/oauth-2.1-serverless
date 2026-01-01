@@ -1,7 +1,10 @@
 # ==============================================================================
-# OAuth Server - Configuration
+# OAuth Server - Development Environment Configuration
 # ==============================================================================
 # All settings are explicit. Generate csrf_secret with: openssl rand -hex 32
+#
+# IMPORTANT: This file is for DEVELOPMENT ONLY.
+# For production, create environments/prod/ with secure settings.
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -14,10 +17,10 @@ domain_name  = ""
 
 # ------------------------------------------------------------------------------
 # Security
-# IMPORTANT: Replace csrf_secret before deployment!
-# Generate with: openssl rand -hex 32
 # ------------------------------------------------------------------------------
-# csrf_secret must be set before deployment - generate with: openssl rand -hex 32
+# DEVELOPMENT ONLY: This hardcoded secret is for local development convenience.
+# Production deployments MUST use a unique secret generated with:
+#   openssl rand -hex 32
 csrf_secret          = "4279fc974e6499cee650add964481b934aeb27e91374baa44b98fdb2c10cb868"
 cors_allowed_origins = ["http://localhost:3000"]
 
@@ -29,15 +32,26 @@ cors_allow_credentials = false
 cors_max_age           = 86400
 
 # ------------------------------------------------------------------------------
+# Client Registration Security (RFC 7591)
+# Controls who can register new OAuth clients via POST /connect/register
+# ------------------------------------------------------------------------------
+# DEVELOPMENT: Allow open registration for testing
+# PRODUCTION: Set client_registration_token and disable open registration
+client_registration_token      = ""
+allow_open_client_registration = true
+
+# ------------------------------------------------------------------------------
 # DynamoDB
-# For production, set both to true
+# DEVELOPMENT: Disabled for easy cleanup
+# PRODUCTION: Set both to true for data protection and SOC2 compliance
 # ------------------------------------------------------------------------------
 enable_deletion_protection    = false
 enable_point_in_time_recovery = false
 
 # ------------------------------------------------------------------------------
 # KMS
-# For production, use 30 days
+# DEVELOPMENT: 7 days for faster cleanup
+# PRODUCTION: Use 30 days to allow recovery from accidental deletion
 # ------------------------------------------------------------------------------
 kms_key_deletion_window_days = 7
 
@@ -67,19 +81,29 @@ jwt_key_id = "jwt-key-1"
 
 # ------------------------------------------------------------------------------
 # Logging
-# For SOC2 compliance, use 365 days minimum in production
+# DEVELOPMENT: 30 days for cost savings
+# PRODUCTION: SOC2 requires minimum 365 days for audit trails
 # ------------------------------------------------------------------------------
 log_retention_days = 30
 
 # ------------------------------------------------------------------------------
 # API Gateway Throttling
-# Adjust based on expected traffic. Higher values for production.
+# Protects against DDoS attacks and ensures fair usage across clients.
 # ------------------------------------------------------------------------------
 throttling_burst_limit = 1000
 throttling_rate_limit  = 500
 
 # ------------------------------------------------------------------------------
 # Features
+# Enable only the authentication strategies you need
 # ------------------------------------------------------------------------------
 enable_password_strategy = true
 enable_saml_strategy     = true
+enable_mfa_totp_strategy = false
+
+# ------------------------------------------------------------------------------
+# Token Lifetimes (seconds)
+# ------------------------------------------------------------------------------
+access_token_ttl  = 3600    # 1 hour
+id_token_ttl      = 3600    # 1 hour
+refresh_token_ttl = 2592000 # 30 days

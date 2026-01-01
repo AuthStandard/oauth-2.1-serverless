@@ -104,6 +104,8 @@ resource "aws_cloudwatch_log_group" "lambda" {
 # PutItem: Create user
 # GetItem: Read user
 # UpdateItem: Update user status
+# DeleteItem: Delete user (RFC 7644 Section 3.6)
+# BatchWriteItem: Bulk delete tokens/sessions on user deletion
 # Query: Check email uniqueness (GSI1), revoke refresh tokens (GSI1)
 # ------------------------------------------------------------------------------
 
@@ -120,7 +122,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         Action = [
           "dynamodb:PutItem",
           "dynamodb:GetItem",
-          "dynamodb:UpdateItem"
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:BatchWriteItem"
         ]
         Resource = var.dynamodb_table_arn
       },
@@ -139,7 +143,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
 }
 
 # ------------------------------------------------------------------------------
-# KMS Policy (Encrypt/Decrypt for DynamoDB)
+# KMS Policy (Encrypt/Decrypt for DynamoDB + GetPublicKey for JWT verification)
 # ------------------------------------------------------------------------------
 
 resource "aws_iam_role_policy" "lambda_kms" {
@@ -158,6 +162,14 @@ resource "aws_iam_role_policy" "lambda_kms" {
           "kms:GenerateDataKey"
         ]
         Resource = var.dynamodb_encryption_key_arn
+      },
+      {
+        Sid    = "GetPublicKeyForJwtVerification"
+        Effect = "Allow"
+        Action = [
+          "kms:GetPublicKey"
+        ]
+        Resource = var.kms_key_arn
       }
     ]
   })
@@ -211,6 +223,7 @@ resource "aws_lambda_function" "scim_users" {
     variables = {
       TABLE_NAME = var.dynamodb_table_name
       ISSUER     = var.issuer
+      KMS_KEY_ID = var.kms_key_id
     }
   }
 
@@ -259,6 +272,13 @@ resource "aws_apigatewayv2_route" "scim_users_get" {
 resource "aws_apigatewayv2_route" "scim_users_patch" {
   api_id    = var.api_gateway_id
   route_key = "PATCH /scim/v2/Users/{id}"
+  target    = "integrations/${aws_apigatewayv2_integration.scim_users.id}"
+}
+
+# DELETE /scim/v2/Users/{id} - Delete user (RFC 7644 Section 3.6)
+resource "aws_apigatewayv2_route" "scim_users_delete" {
+  api_id    = var.api_gateway_id
+  route_key = "DELETE /scim/v2/Users/{id}"
   target    = "integrations/${aws_apigatewayv2_integration.scim_users.id}"
 }
 

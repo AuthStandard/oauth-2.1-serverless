@@ -19,7 +19,7 @@
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { argon2id } from 'hash-wasm';
 import { AuditLogger } from '@oauth-server/shared';
 import type { ScimUserCreateRequest, EnvConfig } from './types';
@@ -100,12 +100,13 @@ export async function handlePostUser(
     const sub = randomUUID();
 
     // Step 5: Hash password if provided
+    // Uses cryptographically secure 128-bit salt per OWASP recommendations
     let passwordHash: string | undefined;
     if (body.password) {
         try {
             passwordHash = await argon2id({
                 password: body.password,
-                salt: Buffer.from(randomUUID().replace(/-/g, ''), 'hex'),
+                salt: randomBytes(16), // 128-bit cryptographically secure salt
                 ...ARGON2_CONFIG,
             });
         } catch {
